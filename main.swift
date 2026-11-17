@@ -95,6 +95,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func applyToggle() {
         let target = sleepDisabled() ? 0 : 1
+        // If the user installed the passwordless rule (see README), this succeeds with no prompt.
+        let quick = Process()
+        quick.executableURL = URL(fileURLWithPath: "/usr/bin/sudo")
+        quick.arguments = ["-n", "/usr/bin/pmset", "-a", "disablesleep", "\(target)"]
+        quick.standardOutput = Pipe(); quick.standardError = Pipe()
+        if (try? quick.run()) != nil {
+            quick.waitUntilExit()
+            if quick.terminationStatus == 0 { refresh(); return }
+        }
         let script = "do shell script \"/usr/bin/pmset -a disablesleep \(target)\" with administrator privileges"
         // Run the admin prompt in a separate osascript process, off the main thread, so the
         // app's UI never blocks while macOS's password dialog is up.

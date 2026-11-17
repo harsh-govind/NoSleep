@@ -38,3 +38,13 @@ With the lid closed the Mac keeps running. Don't put it in a bag while NoSleep i
 ```sh
 swift tools/make_icon.swift /tmp/AppIcon.iconset && iconutil -c icns /tmp/AppIcon.iconset -o AppIcon.icns
 ```
+
+## Optional: no password prompt
+By default macOS asks for your admin password each time you flip the switch. To skip it, run this once.
+It lets only `pmset -a disablesleep 0` / `1` run without a password, and nothing else:
+
+```sh
+echo "$(whoami) ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a disablesleep 1" | sudo tee /etc/sudoers.d/nosleep >/dev/null && sudo chmod 440 /etc/sudoers.d/nosleep && sudo visudo -c
+```
+
+To undo: `sudo rm /etc/sudoers.d/nosleep`
