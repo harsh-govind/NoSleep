@@ -96,15 +96,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func applyToggle() {
         let target = sleepDisabled() ? 0 : 1
         let script = "do shell script \"/usr/bin/pmset -a disablesleep \(target)\" with administrator privileges"
-        var err: NSDictionary?
-        NSAppleScript(source: script)?.executeAndReturnError(&err)
-        if let err = err, (err[NSAppleScript.errorNumber] as? Int) != -128 {
-            let a = NSAlert()
-            a.messageText = "Couldn't change sleep setting"
-            a.informativeText = "\(err[NSAppleScript.errorMessage] ?? err)"
-            a.runModal()
+        // Run the admin prompt in a separate osascript process, off the main thread, so the
+        // app's UI never blocks while macOS's password dialog is up.
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+            p.arguments = ["-e", script]
+            let errPipe = Pipe()
+            p.standardError = errPipe
+            p.standardOutput = Pipe()
+            try? p.run()
+            p.waitUntilExit()
+            let errText = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            DispatchQueue.main.async {
+                // -128 = user clicked "Don't Allow"; stay quiet in that case.
+                if p.terminationStatus != 0 && !errText.contains("-128") {
+                    let a = NSAlert()
+                    a.messageText = "Couldn't change sleep setting"
+                    a.informativeText = errText
+                    a.runModal()
+                }
+                self?.refresh()
+            }
         }
-        refresh()
     }
 
     @objc private func toggleLogin() {
