@@ -48,3 +48,5 @@ echo "$(whoami) ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/
 ```
 
 To undo: `sudo rm /etc/sudoers.d/nosleep`
+
+All commands in one place: [COMMANDS.md](COMMANDS.md)
