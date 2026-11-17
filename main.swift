@@ -84,6 +84,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func toggle() {
+        // Close the menu first: while it's tracking, the password dialog can't take keyboard focus.
+        statusItem.menu?.cancelTracking()
+        // Run after the menu has fully closed, with the app frontmost so the dialog gets the keyboard.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            NSApp.activate(ignoringOtherApps: true)
+            self?.applyToggle()
+        }
+    }
+
+    private func applyToggle() {
         let target = sleepDisabled() ? 0 : 1
         let script = "do shell script \"/usr/bin/pmset -a disablesleep \(target)\" with administrator privileges"
         var err: NSDictionary?
