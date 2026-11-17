@@ -2,64 +2,48 @@ import Cocoa
 import IOKit.pwr_mgt
 import ServiceManagement
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private var assertionID: IOPMAssertionID = 0
-    private var toggleItem: NSMenuItem!
     private var loginItem: NSMenuItem!
-    private var statusLine: NSMenuItem!
-
-    private var menu: NSMenu!
     private var toggleSwitch: NSSwitch!
+    private var stateLabel: NSTextField!
 
     func applicationDidFinishLaunching(_ n: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        // Left-click toggles; right-click (or ctrl-click) opens the menu.
-        statusItem.button?.target = self
-        statusItem.button?.action = #selector(iconClicked)
-        statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        let menu = NSMenu()
+        menu.delegate = self
 
-        menu = NSMenu()
-        statusLine = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-        statusLine.isEnabled = false
-        menu.addItem(statusLine)
-        menu.addItem(.separator())
-
-        // A row with a label and an on/off switch.
-        let row = NSView(frame: NSRect(x: 0, y: 0, width: 260, height: 32))
-        let label = NSTextField(labelWithString: "Never Sleep (lid closed too)")
-        label.font = NSFont.menuFont(ofSize: 0)
-        label.frame = NSRect(x: 14, y: 8, width: 190, height: 18)
-        toggleSwitch = NSSwitch(frame: NSRect(x: 205, y: 4, width: 42, height: 24))
+        // Header: title + status on the left, on/off switch on the right.
+        let header = NSView(frame: NSRect(x: 0, y: 0, width: 260, height: 52))
+        let title = NSTextField(labelWithString: "NoSleep")
+        title.font = .boldSystemFont(ofSize: 13)
+        title.frame = NSRect(x: 14, y: 26, width: 180, height: 18)
+        stateLabel = NSTextField(labelWithString: "")
+        stateLabel.font = .systemFont(ofSize: 11)
+        stateLabel.textColor = .secondaryLabelColor
+        stateLabel.frame = NSRect(x: 14, y: 8, width: 190, height: 16)
+        toggleSwitch = NSSwitch(frame: NSRect(x: 204, y: 14, width: 42, height: 24))
         toggleSwitch.target = self
         toggleSwitch.action = #selector(toggle)
-        row.addSubview(label); row.addSubview(toggleSwitch)
-        toggleItem = NSMenuItem()
-        toggleItem.view = row
-        menu.addItem(toggleItem)
+        [title, stateLabel, toggleSwitch].forEach { header.addSubview($0) }
+        let headerItem = NSMenuItem()
+        headerItem.view = header
+        menu.addItem(headerItem)
+        menu.addItem(.separator())
 
+        // Options below the switch.
         loginItem = NSMenuItem(title: "Open at Login", action: #selector(toggleLogin), keyEquivalent: "")
         loginItem.target = self
         menu.addItem(loginItem)
         menu.addItem(.separator())
-        let hint = NSMenuItem(title: "Tip: left-click the icon to toggle", action: nil, keyEquivalent: "")
-        hint.isEnabled = false
-        menu.addItem(hint)
-        menu.addItem(NSMenuItem(title: "Quit NoSleep (setting stays as is)", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: "Quit NoSleep", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+
+        statusItem.menu = menu
         refresh()
     }
 
-    @objc private func iconClicked() {
-        let e = NSApp.currentEvent
-        if e?.type == .rightMouseUp || e?.modifierFlags.contains(.control) == true {
-            refresh()
-            statusItem.menu = menu
-            statusItem.button?.performClick(nil)
-            statusItem.menu = nil
-        } else {
-            toggle()
-        }
-    }
+    func menuWillOpen(_ menu: NSMenu) { refresh() }
 
     /// Reads the system-wide `SleepDisabled` flag from pmset.
     private func sleepDisabled() -> Bool {
@@ -80,8 +64,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func refresh() {
         let on = sleepDisabled()
         toggleSwitch.state = on ? .on : .off
-        statusItem.button?.toolTip = on ? "NoSleep: ON (click to turn off)" : "NoSleep: OFF (click to turn on)"
-        statusLine.title = on ? "NoSleep is ON: Mac will not sleep" : "NoSleep is OFF: normal sleep"
+        statusItem.button?.toolTip = on ? "NoSleep: ON" : "NoSleep: OFF"
+        stateLabel.stringValue = on ? "On: Mac will not sleep" : "Off: normal sleep"
         let symbol = on ? "cup.and.saucer.fill" : "moon.zzz"
         statusItem.button?.image = NSImage(systemSymbolName: symbol, accessibilityDescription: "NoSleep")
         loginItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
