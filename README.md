@@ -10,7 +10,8 @@ NoSleep flips the system-wide `pmset disablesleep` flag, which is the only relia
 Mac running in clamshell mode without an external display.
 
 ## Features
-- Menu bar toggle: ☕ = never sleeps, 🌙 = normal sleep
+- **Left-click** the menu bar icon to toggle on/off (☕ = ON, never sleeps · 🌙 = OFF, normal sleep)
+- **Right-click** for the menu, with an on/off switch and Open at Login
 - Works with the lid closed, on battery or power
 - The setting stays on after you quit the app or restart, until you turn it off
 - Optional **Open at Login**
