@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var loginItem: NSMenuItem!
     private var toggleSwitch: NSSwitch!
     private var stateLabel: NSTextField!
+    private var pendingTarget = 0
 
     func applicationDidFinishLaunching(_ n: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -128,6 +129,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func toggle() {
+        // Follow the switch's new position exactly (not "invert whatever the system says").
+        pendingTarget = toggleSwitch.state == .on ? 1 : 0
         // Close the menu first: while it's tracking, the password dialog can't take keyboard focus.
         statusItem.menu?.cancelTracking()
         // Run after the menu has fully closed, with the app frontmost so the dialog gets the keyboard.
@@ -138,7 +141,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func applyToggle() {
-        let target = sleepDisabled() ? 0 : 1
+        let target = pendingTarget
+        if (target == 1) == sleepDisabled() { wantOn = target == 1; refresh(); return }
         // If the user installed the passwordless rule (see README), this succeeds with no prompt.
         if runQuiet("/usr/bin/sudo", ["-n", "/usr/bin/pmset", "-a", "disablesleep", "\(target)"]) {
             wantOn = target == 1
