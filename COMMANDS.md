@@ -41,3 +41,10 @@ cp -R NoSleep.app /Applications/ && open /Applications/NoSleep.app
 ```sh
 osascript -e 'do shell script "pmset -g" with administrator privileges'
 ```
+
+## See what NoSleep has been doing
+Logs every switch, and every time it had to turn the setting back on because something reset it.
+
+```sh
+cat ~/Library/Logs/NoSleep.log
+```

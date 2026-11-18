@@ -40,10 +40,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(NSMenuItem(title: "Quit NoSleep", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
 
         statusItem.menu = menu
-        refresh()
+
+        // Keep the setting on while the user wants it on: re-check every few seconds and after every wake.
+        Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.enforce() }
+        let ws = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification, NSWorkspace.sessionDidBecomeActiveNotification] {
+            ws.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in self?.enforce() }
+        }
+        enforce()
     }
 
     func menuWillOpen(_ menu: NSMenu) { refresh() }
+
+    /// What the user last chose with the switch (remembered across restarts).
+    private var wantOn: Bool {
+        get { UserDefaults.standard.bool(forKey: "wantOn") }
+        set { UserDefaults.standard.set(newValue, forKey: "wantOn") }
+    }
+
+    /// If the user wants NoSleep on but something turned the system setting off, turn it back on.
+    private func enforce() {
+        if wantOn && !sleepDisabled() {
+            let ok = runQuiet("/usr/bin/sudo", ["-n", "/usr/bin/pmset", "-a", "disablesleep", "1"])
+            log("SleepDisabled was reset to 0 by something else; re-applied: \(ok ? "ok" : "FAILED (passwordless rule missing?)")")
+        }
+        refresh()
+    }
+
+    @discardableResult
+    private func runQuiet(_ path: String, _ args: [String]) -> Bool {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: path)
+        p.arguments = args
+        p.standardOutput = Pipe(); p.standardError = Pipe()
+        guard (try? p.run()) != nil else { return false }
+        p.waitUntilExit()
+        return p.terminationStatus == 0
+    }
+
+    /// Appends a line to ~/Library/Logs/NoSleep.log.
+    private func log(_ msg: String) {
+        let url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/NoSleep.log")
+        let line = "\(ISO8601DateFormatter().string(from: Date())) \(msg)\n"
+        if let h = try? FileHandle(forWritingTo: url) {
+            h.seekToEndOfFile(); h.write(line.data(using: .utf8)!); try? h.close()
+        } else {
+            try? line.write(to: url, atomically: true, encoding: .utf8)
+        }
+    }
 
     /// Reads the system-wide `SleepDisabled` flag from pmset.
     private func sleepDisabled() -> Bool {
@@ -96,13 +140,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func applyToggle() {
         let target = sleepDisabled() ? 0 : 1
         // If the user installed the passwordless rule (see README), this succeeds with no prompt.
-        let quick = Process()
-        quick.executableURL = URL(fileURLWithPath: "/usr/bin/sudo")
-        quick.arguments = ["-n", "/usr/bin/pmset", "-a", "disablesleep", "\(target)"]
-        quick.standardOutput = Pipe(); quick.standardError = Pipe()
-        if (try? quick.run()) != nil {
-            quick.waitUntilExit()
-            if quick.terminationStatus == 0 { refresh(); return }
+        if runQuiet("/usr/bin/sudo", ["-n", "/usr/bin/pmset", "-a", "disablesleep", "\(target)"]) {
+            wantOn = target == 1
+            log("Switched \(target == 1 ? "ON" : "OFF")")
+            refresh(); return
         }
         let script = "do shell script \"/usr/bin/pmset -a disablesleep \(target)\" with administrator privileges"
         // Run the admin prompt in a separate osascript process, off the main thread, so the
@@ -125,7 +166,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     a.informativeText = errText
                     a.runModal()
                 }
-                self?.refresh()
+                if let self = self {
+                    self.wantOn = self.sleepDisabled()
+                    self.log("Switched \(self.wantOn ? "ON" : "OFF") (password prompt)")
+                    self.refresh()
+                }
             }
         }
     }
