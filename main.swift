@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var toggleSwitch: NSSwitch!
     private var stateLabel: NSTextField!
     private var pendingTarget = 0
+    private var menuOpenedAt = Date.distantPast
 
     func applicationDidFinishLaunching(_ n: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -51,7 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         enforce()
     }
 
-    func menuWillOpen(_ menu: NSMenu) { refresh() }
+    func menuWillOpen(_ menu: NSMenu) { menuOpenedAt = Date(); refresh() }
 
     /// What the user last chose with the switch (remembered across restarts).
     private var wantOn: Bool {
@@ -131,6 +132,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func toggle() {
         // Follow the switch's new position exactly (not "invert whatever the system says").
         pendingTarget = toggleSwitch.state == .on ? 1 : 0
+        // Root cause of "it stops working": the click that opens the menu can land on the switch
+        // (it sits under the pointer when the icon is near the right edge). Ignore those.
+        if Date().timeIntervalSince(menuOpenedAt) < 0.6 {
+            log("Ignored a stray switch click right as the menu opened")
+            refresh(); return
+        }
+        // Turning OFF must be deliberate: ask first.
+        if pendingTarget == 0 && wantOn {
+            statusItem.menu?.cancelTracking()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                guard let self = self else { return }
+                NSApp.activate(ignoringOtherApps: true)
+                let a = NSAlert()
+                a.messageText = "Turn off NoSleep?"
+                a.informativeText = "Your Mac will go back to sleeping normally, including when you close the lid."
+                a.addButton(withTitle: "Keep On")
+                a.addButton(withTitle: "Turn Off")
+                if a.runModal() == .alertSecondButtonReturn {
+                    self.applyToggle()
+                } else {
+                    self.log("Turn-off cancelled; staying ON")
+                    self.refresh()
+                }
+            }
+            return
+        }
         // Close the menu first: while it's tracking, the password dialog can't take keyboard focus.
         statusItem.menu?.cancelTracking()
         // Run after the menu has fully closed, with the app frontmost so the dialog gets the keyboard.
